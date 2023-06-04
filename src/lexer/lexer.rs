@@ -11,17 +11,18 @@ pub enum Token {
     Float(f64),
     // Bool(bool),
     // Date(String),
-    // Varchar(String),
+    Varchar(String),
     Null,
 
     // DDL
-    // DDL(DDLKeyword),
+    DDL(DDLKeyword),
 
-    // ColumnFunction(Function),
+    // Functions
+    ColumnFunction(Function),
 
     // Operators
     Plus,
-    Minus, // TODO: Also check for comments inline comments --
+    Minus, 
     Asterisk,
     Slash,
 
@@ -33,6 +34,8 @@ pub enum Token {
     Semicolon,
     Colon, 
     Dollar,
+    SingleQuote,
+    DoubleQuote,
 
     // Comments
     BlockComment(String),
@@ -91,6 +94,8 @@ pub enum Token {
     EOF,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
 pub enum DDLKeyword {
     Alter,
     Create,
@@ -102,6 +107,8 @@ pub enum DDLKeyword {
     Update,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
 pub enum Function {
     Avg,
     Cast,
@@ -175,14 +182,17 @@ impl Lexer {
                     Token::Colon
                 }
             },
+            b'\'' => Token::Varchar(self.read_varchar()),
+            b'"' => Token::DoubleQuote,
+
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                 let ident = self.read_ident();
                 let lower_ident = ident.clone().to_lowercase();
-                let ident_type = match lower_ident.as_str() {
-                    "null" => Token::Null,
-                    _ => Token::Ident(ident),
+                let ident_type = self.match_ident(&lower_ident);
+                return match ident_type {
+                    Some(ident_type) => Ok(ident_type),
+                    None => Ok(Token::Ident(ident)),
                 };
-                return Ok(ident_type);
             },
             b'0'..=b'9' => {
                 let potential_number = self.read_number();
@@ -261,6 +271,48 @@ impl Lexer {
         return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
     }
 
+    fn match_ident(&self, ident: &str) -> Option<Token>{
+        let returned_tok = match ident {
+            "alter" => Some(Token::DDL(DDLKeyword::Alter)),
+            "create" => Some(Token::DDL(DDLKeyword::Create)),
+            "delete" => Some(Token::DDL(DDLKeyword::Delete)),
+            "drop" => Some(Token::DDL(DDLKeyword::Drop)),
+            "insert" => Some(Token::DDL(DDLKeyword::Insert)),
+            "replace" => Some(Token::DDL(DDLKeyword::Replace)),
+            "truncate" => Some(Token::DDL(DDLKeyword::Truncate)),
+            "update" => Some(Token::DDL(DDLKeyword::Update)),
+
+            "avg" => Some(Token::ColumnFunction(Function::Avg)),
+            "cast" => Some(Token::ColumnFunction(Function::Cast)),
+            "concat" => Some(Token::ColumnFunction(Function::Concat)),
+            "count" => Some(Token::ColumnFunction(Function::Count)),
+            "max" => Some(Token::ColumnFunction(Function::Max)),
+            "min" => Some(Token::ColumnFunction(Function::Min)),
+            "sum" => Some(Token::ColumnFunction(Function::Sum)),
+
+            "dense_rank" => Some(Token::ColumnFunction(Function::DenseRank)),
+            "lag" => Some(Token::ColumnFunction(Function::Lag)),
+            "lead" => Some(Token::ColumnFunction(Function::Lead)),
+            "rank" => Some(Token::ColumnFunction(Function::Rank)),
+            "row_number" => Some(Token::ColumnFunction(Function::RowNumber)),
+
+            _ => None,
+        };
+
+        return returned_tok;
+
+    }
+
+    fn read_varchar(&mut self) -> String {
+        let start = self.position;
+        println!("{:?}", self.ch as char);
+        self.read_char();
+        while self.ch != b'\'' {
+            self.read_char();
+            println!("{}", self.ch as char);
+        }
+        return String::from_utf8_lossy(&self.input[start..=self.position]).to_string();
+    }
 
     fn peek_char(&self) -> u8 {
         if self.read_position >= self.input.len() {
@@ -280,7 +332,7 @@ mod tests {
     #[test]
     fn assert_basic_string_match() -> Result<()> {
         let input = r#"
-                SET x = 2; // This is x, it is cool
+                SET x = 'Hello'; // This is x, it is cool
             "#;
 
         let mut lexer = Lexer::new(input.into());
@@ -289,9 +341,10 @@ mod tests {
             Token::Ident("SET".into()),
             Token::Ident("x".into()),
             Token::Equal,
-            Token::Int(2),
+            Token::Varchar("'Hello'".into()),
             Token::Semicolon,
             Token::InlineComment("// This is x, it is cool".into()),
+            Token::EOF,
         ];
 
         for token in tokens {
