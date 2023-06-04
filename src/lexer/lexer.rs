@@ -40,7 +40,7 @@ pub enum Token {
 
 
     // Comparisons
-    // Equal,
+    Equal,
     // GreaterThan,
     // GreaterThanEqual,
     // LessThan,
@@ -143,8 +143,15 @@ impl Lexer {
 
         let token = match self.ch {
             b'+' => Token::Plus,
-            b'-' => Token::Minus,
+            b'-' => {
+                if self.peek_char() == b'-' {
+                    Token::InlineComment(self.read_inline_comment())
+                } else {
+                    Token::Minus
+                }
+            }
             b'*' => Token::Asterisk,
+            b'=' => Token::Equal,
             b'/' => Token::Slash,
 
             b'(' => Token::OpenParen,
@@ -174,11 +181,12 @@ impl Lexer {
                 let ret_tok = match &potential_number
                     .chars()
                     .filter(|ch| ch == &'.')
-                    .count() {
-                        0 => Token::Int(potential_number.parse().unwrap()),
-                        1 => Token::Float(potential_number.parse().unwrap()),
-                        _ => Token::Illegal,
-                    };
+                    .count() 
+                {
+                    0 => Token::Int(potential_number.parse().unwrap()),
+                    1 => Token::Float(potential_number.parse().unwrap()),
+                    _ => Token::Illegal,
+                };
                 
                 return Ok(ret_tok);
             }
@@ -223,6 +231,14 @@ impl Lexer {
         return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
     }
 
+    fn read_inline_comment(&mut self) -> String {
+        let start = self.position;
+        while self.ch != b'\n' {
+            self.read_char();
+        }
+        return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
+    }
+
     fn peek_char(&self) -> u8 {
         if self.read_position >= self.input.len() {
             return 0;
@@ -240,23 +256,33 @@ mod tests {
 
     #[test]
     fn assert_basic_string_match() -> Result<()> {
-        let input = r#"(4 + 5.0);"#;
-
-        println!("{:?}", &input.bytes());
+        let input = r#"
+            SET x = 2; -- This is x, it is cool
+            SELECT * FROM test;
+            -- Not
+            -- Soueu
+            --------oeuaoeuou-aoeu-eo-au-eaou-eou-u-ae--
+            "#;
 
         let mut lexer = Lexer::new(input.into());
 
         let tokens = vec![
-            Token::OpenParen,
-            Token::Int(4),
-            Token::Plus,
-            Token::Float(5.0),
-            Token::CloseParen,
+            Token::Ident("SET".into()),
+            Token::Ident("x".into()),
+            Token::Equal,
+            Token::Int(2),
             Token::Semicolon,
-            Token::EOF,
+            Token::InlineComment("-- This is x, it is cool".into()),
+            Token::Ident("SELECT".into()),
+            Token::Asterisk,
+            Token::Ident("FROM".into()),
+            Token::Ident("test".into()),
+            Token::Semicolon,
+            Token::InlineComment("-- Not".into()),
+            Token::InlineComment("-- Soueu".into()),
+            Token::InlineComment("--------oeuaoeuou-aoeu-eo-au-eaou-eou-u-ae--".into()),
         ];
 
-        println!("{input:?}");
         for token in tokens {
             let next_token = lexer.next_token()?;
             println!("expected: {:?}, recieved: {:?}", token, next_token);
