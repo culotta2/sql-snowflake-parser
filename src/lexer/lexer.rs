@@ -1,6 +1,9 @@
 use anyhow::Result;
 
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
+    Illegal,
     Ident(String),
 
     // Literals
@@ -18,7 +21,7 @@ pub enum Token {
 
     // Operators
     Plus,
-    Minus,
+    Minus, // TODO: Also check for comments inline comments --
     Asterisk,
     Slash,
 
@@ -28,8 +31,13 @@ pub enum Token {
     Comma,
     Period,
     Semicolon,
-    Colon,
+    Colon, 
     Dollar,
+
+    // Comments
+    BlockComment(String),
+    InlineComment(String),
+
 
     // Comparisons
     // Equal,
@@ -47,7 +55,7 @@ pub enum Token {
     // Keywords
     // All,
     // As,
-    // Assign, // :=
+    Assign, // :=
     // Between,
     // By,
     // Caller,
@@ -145,7 +153,13 @@ impl Lexer {
             b'.' => Token::Period,
             b';' => Token::Semicolon,
             b'$' => Token::Dollar,
-            b':' => todo!(),
+            b':' => {
+                if self.peek_char() == b'=' {
+                    Token::Assign
+                } else {
+                    Token::Colon
+                }
+            },
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                 let ident = self.read_ident();
                 let lower_ident = ident.clone().to_lowercase();
@@ -155,7 +169,21 @@ impl Lexer {
                 };
                 return Ok(ident_type);
             },
-            _ => todo!(), 
+            b'0'..=b'9' => {
+                let potential_number = self.read_number();
+                let ret_tok = match &potential_number
+                    .chars()
+                    .filter(|ch| ch == &'.')
+                    .count() {
+                        0 => Token::Int(potential_number.parse().unwrap()),
+                        1 => Token::Float(potential_number.parse().unwrap()),
+                        _ => Token::Illegal,
+                    };
+                
+                return Ok(ret_tok);
+            }
+            0 => Token::EOF,
+            _ => todo!(),
         };
 
         self.read_char();
@@ -168,6 +196,8 @@ impl Lexer {
         } else {
             self.ch = self.input[self.read_position];
         }
+        self.position = self.read_position;
+        self.read_position += 1;
     }
 
     fn skip_whitespace(&mut self) {
@@ -184,12 +214,55 @@ impl Lexer {
         return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
     }
 
-    fn read_int(&mut self) -> String {
+    fn read_number(&mut self) -> String {
         let start = self.position;
-        while self.ch.is_ascii_alphanumeric() || self.ch == b'_' {
+        while self.ch.is_ascii_digit() || self.ch == b'.' {
             self.read_char();
         }
+
         return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
+    }
+
+    fn peek_char(&self) -> u8 {
+        if self.read_position >= self.input.len() {
+            return 0;
+        } else {
+            return self.input[self.read_position];
+        }
     }
 }
     
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::{Token, Lexer};
+
+    #[test]
+    fn assert_basic_string_match() -> Result<()> {
+        let input = r#"(4 + 5.0);"#;
+
+        println!("{:?}", &input.bytes());
+
+        let mut lexer = Lexer::new(input.into());
+
+        let tokens = vec![
+            Token::OpenParen,
+            Token::Int(4),
+            Token::Plus,
+            Token::Float(5.0),
+            Token::CloseParen,
+            Token::Semicolon,
+            Token::EOF,
+        ];
+
+        println!("{input:?}");
+        for token in tokens {
+            let next_token = lexer.next_token()?;
+            println!("expected: {:?}, recieved: {:?}", token, next_token);
+            assert_eq!(token, next_token);
+        }
+
+        Ok(())
+    }
+}
