@@ -57,7 +57,7 @@ pub enum Token {
 
     // Keywords
     // All,
-    // As,
+    As,
     Assign, // :=
     // Between,
     // By,
@@ -66,7 +66,7 @@ pub enum Token {
     // Distinct,
     // Except,
     // Execute,
-    // From,
+    From,
     // Function,
     // Group,
     // Having,
@@ -77,7 +77,7 @@ pub enum Token {
     // Order,
     // Procedure,
     // Return,
-    // Select,
+    Select,
     // Set,
     // Top,
     // Union,
@@ -188,7 +188,7 @@ impl Lexer {
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                 let ident = self.read_ident();
                 let lower_ident = ident.clone().to_lowercase();
-                let ident_type = self.match_ident(&lower_ident);
+                let ident_type = self.string_to_token(&lower_ident);
                 return match ident_type {
                     Some(ident_type) => Ok(ident_type),
                     None => Ok(Token::Ident(ident)),
@@ -271,7 +271,7 @@ impl Lexer {
         return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
     }
 
-    fn match_ident(&self, ident: &str) -> Option<Token>{
+    fn string_to_token(&self, ident: &str) -> Option<Token>{
         let returned_tok = match ident {
             "alter" => Some(Token::DDL(DDLKeyword::Alter)),
             "create" => Some(Token::DDL(DDLKeyword::Create)),
@@ -295,6 +295,10 @@ impl Lexer {
             "lead" => Some(Token::ColumnFunction(Function::Lead)),
             "rank" => Some(Token::ColumnFunction(Function::Rank)),
             "row_number" => Some(Token::ColumnFunction(Function::RowNumber)),
+
+            "select" => Some(Token::Select),
+            "from" => Some(Token::From),
+            "as" => Some(Token::As),
 
             _ => None,
         };
@@ -327,24 +331,32 @@ impl Lexer {
 mod tests {
     use anyhow::Result;
 
-    use super::{Token, Lexer};
+    use super::{Token, Lexer, Function};
 
     #[test]
     fn assert_basic_string_match() -> Result<()> {
         let input = r#"
-                SET x = 'Hello'; // This is x, it is cool
+                SELECT
+                    *, 
+                    SUM(x) AS sum_x
+                FROM table_name;
             "#;
 
         let mut lexer = Lexer::new(input.into());
 
         let tokens = vec![
-            Token::Ident("SET".into()),
-            Token::Ident("x".into()),
-            Token::Equal,
-            Token::Varchar("'Hello'".into()),
+            Token::Select,
+            Token::Asterisk,
+            Token::Comma,
+            Token::ColumnFunction(Function::Sum),
+            Token::OpenParen,
+            Token::Ident("x".to_string()),
+            Token::CloseParen,
+            Token::As,
+            Token::Ident("sum_x".to_string()),
+            Token::From,
+            Token::Ident("table_name".to_string()),
             Token::Semicolon,
-            Token::InlineComment("// This is x, it is cool".into()),
-            Token::EOF,
         ];
 
         for token in tokens {
