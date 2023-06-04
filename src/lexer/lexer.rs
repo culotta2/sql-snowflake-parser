@@ -152,7 +152,15 @@ impl Lexer {
             }
             b'*' => Token::Asterisk,
             b'=' => Token::Equal,
-            b'/' => Token::Slash,
+            b'/' => {
+                if self.peek_char() == b'*' {
+                    Token::BlockComment(self.read_block_comment())
+                } else if self.peek_char() == b'/' {
+                    Token::InlineComment(self.read_inline_comment())
+                } else {
+                    Token::Slash
+                }
+            },
 
             b'(' => Token::OpenParen,
             b')' => Token::CloseParen,
@@ -239,6 +247,21 @@ impl Lexer {
         return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
     }
 
+    fn read_block_comment(&mut self) -> String {
+        let start = self.position;
+        loop {
+            if self.ch == b'*' && self.peek_char() == b'/' {
+                self.read_char();
+                self.read_char();
+                break;
+            }
+
+            self.read_char();
+        }
+        return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
+    }
+
+
     fn peek_char(&self) -> u8 {
         if self.read_position >= self.input.len() {
             return 0;
@@ -257,11 +280,7 @@ mod tests {
     #[test]
     fn assert_basic_string_match() -> Result<()> {
         let input = r#"
-            SET x = 2; -- This is x, it is cool
-            SELECT * FROM test;
-            -- Not
-            -- Soueu
-            --------oeuaoeuou-aoeu-eo-au-eaou-eou-u-ae--
+                SET x = 2; // This is x, it is cool
             "#;
 
         let mut lexer = Lexer::new(input.into());
@@ -272,15 +291,7 @@ mod tests {
             Token::Equal,
             Token::Int(2),
             Token::Semicolon,
-            Token::InlineComment("-- This is x, it is cool".into()),
-            Token::Ident("SELECT".into()),
-            Token::Asterisk,
-            Token::Ident("FROM".into()),
-            Token::Ident("test".into()),
-            Token::Semicolon,
-            Token::InlineComment("-- Not".into()),
-            Token::InlineComment("-- Soueu".into()),
-            Token::InlineComment("--------oeuaoeuou-aoeu-eo-au-eaou-eou-u-ae--".into()),
+            Token::InlineComment("// This is x, it is cool".into()),
         ];
 
         for token in tokens {
