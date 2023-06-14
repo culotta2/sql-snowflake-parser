@@ -9,21 +9,31 @@ pub enum Token {
     // Literals
     Int(i64),
     Float(f64),
-    // Bool(bool),
+    Bool(bool),
     // Date(String),
     Varchar(String),
     Null,
 
-    // DDL
+    // Data Language
     DDL(DDLKeyword),
+    DML(DMLKeyword),
+
+    // Join Types
+    JoinType(JoinType),
 
     // Functions
     ColumnFunction(Function),
 
+    // Logical
+    Logical(Logical),
+
+
     // Operators
-    Plus,
-    Minus, 
+    Assign, 
     Asterisk,
+    Minus, 
+    Modulo,
+    Plus,
     Slash,
 
     // Delimiters
@@ -36,6 +46,7 @@ pub enum Token {
     Dollar,
     SingleQuote,
     DoubleQuote,
+    ExclamationPoint,
 
     // Comments
     BlockComment(String),
@@ -44,53 +55,42 @@ pub enum Token {
 
     // Comparisons
     Equal,
-    // GreaterThan,
-    // GreaterThanEqual,
-    // LessThan,
-    // LessThanEqual,
-    // NotEqual,
-
-    // Logical
-    // And,
-    // Not,
-    // Or,
+    GreaterThan,
+    GreaterThanEqual,
+    LessThan,
+    LessThanEqual,
+    NotEqual,
 
     // Keywords
     // All,
     As,
-    Assign, // :=
-    // Between,
-    // By,
-    // Caller,
-    // Case,
-    // Distinct,
-    // Except,
+    Between,
+    By,
+    Caller,
+    Case,
+    Distinct,
+    Except,
     // Execute,
     From,
-    // Function,
-    // Group,
-    // Having,
-    // Join,
+    Function,
+    Group,
+    Having,
+    Join,
     // Language,
-    // Limit,
-    // On,
-    // Order,
-    // Procedure,
-    // Return,
-    Select,
-    // Set,
-    // Top,
-    // Union,
-    // When,
-    // Where,
-    // With,
+    Limit,
+    On,
+    Order,
+    Over,
+    Procedure,
+    Return,
+    Set,
+    Top,
+    Union,
+    When,
+    Where,
+    With,
 
-    // Join Types
-    // Inner,
-    // Left,
-    // Right,
-    // Outer,
-
+    // End of file
     EOF,
 }
 
@@ -99,11 +99,19 @@ pub enum Token {
 pub enum DDLKeyword {
     Alter,
     Create,
-    Delete,
     Drop,
-    Insert,
+    Rename,
     Replace,
     Truncate,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
+pub enum DMLKeyword {
+    Call,
+    Delete,
+    Insert,
+    Select,
     Update,
 }
 
@@ -123,6 +131,24 @@ pub enum Function {
     Lead,
     Rank,
     RowNumber,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
+pub enum JoinType {
+    Inner,
+    Left,
+    Right,
+    Outer,
+    Natural,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
+pub enum Logical {
+    And,
+    Or,
+    Not,
 }
 
 pub struct Lexer {
@@ -150,13 +176,38 @@ impl Lexer {
 
         let token = match self.ch {
             b'+' => Token::Plus,
+            b'%' => Token::Modulo,
+            b'<' => {
+                if self.peek_char() == b'=' {
+                    self.read_char();
+                    Token::LessThanEqual
+                } else {
+                    Token::LessThan
+                }
+            },
+            b'>' => {
+                if self.peek_char() == b'=' {
+                    self.read_char();
+                    Token::GreaterThanEqual
+                } else {
+                    Token::GreaterThan
+                }
+            },
             b'-' => {
                 if self.peek_char() == b'-' {
                     Token::InlineComment(self.read_inline_comment())
                 } else {
                     Token::Minus
                 }
-            }
+            },
+            b'!' => {
+                if self.peek_char() == b'=' {
+                    self.read_char();
+                    Token::NotEqual
+                } else {
+                    Token::ExclamationPoint
+                }
+            },
             b'*' => Token::Asterisk,
             b'=' => Token::Equal,
             b'/' => {
@@ -177,6 +228,7 @@ impl Lexer {
             b'$' => Token::Dollar,
             b':' => {
                 if self.peek_char() == b'=' {
+                    self.read_char();
                     Token::Assign
                 } else {
                     Token::Colon
@@ -184,7 +236,6 @@ impl Lexer {
             },
             b'\'' => Token::Varchar(self.read_varchar()),
             b'"' => Token::DoubleQuote,
-
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                 let ident = self.read_ident();
                 let lower_ident = ident.clone().to_lowercase();
@@ -201,8 +252,8 @@ impl Lexer {
                     .filter(|ch| ch == &'.')
                     .count() 
                 {
-                    0 => Token::Int(potential_number.parse().unwrap()),
-                    1 => Token::Float(potential_number.parse().unwrap()),
+                    0 => Token::Int(potential_number.parse().expect("Expected an int value")),
+                    1 => Token::Float(potential_number.parse().expect("Expected an float value")),
                     _ => Token::Illegal,
                 };
                 
@@ -273,15 +324,22 @@ impl Lexer {
 
     fn string_to_token(&self, ident: &str) -> Option<Token>{
         let returned_tok = match ident {
+            // DDL
             "alter" => Some(Token::DDL(DDLKeyword::Alter)),
             "create" => Some(Token::DDL(DDLKeyword::Create)),
-            "delete" => Some(Token::DDL(DDLKeyword::Delete)),
             "drop" => Some(Token::DDL(DDLKeyword::Drop)),
-            "insert" => Some(Token::DDL(DDLKeyword::Insert)),
             "replace" => Some(Token::DDL(DDLKeyword::Replace)),
+            "rename" => Some(Token::DDL(DDLKeyword::Rename)),
             "truncate" => Some(Token::DDL(DDLKeyword::Truncate)),
-            "update" => Some(Token::DDL(DDLKeyword::Update)),
 
+            // DML
+            "call" => Some(Token::DML(DMLKeyword::Call)),
+            "delete" => Some(Token::DML(DMLKeyword::Delete)),
+            "insert" => Some(Token::DML(DMLKeyword::Insert)),
+            "select" => Some(Token::DML(DMLKeyword::Select)),
+            "update" => Some(Token::DML(DMLKeyword::Update)),
+
+            // Column Functions
             "avg" => Some(Token::ColumnFunction(Function::Avg)),
             "cast" => Some(Token::ColumnFunction(Function::Cast)),
             "concat" => Some(Token::ColumnFunction(Function::Concat)),
@@ -290,15 +348,54 @@ impl Lexer {
             "min" => Some(Token::ColumnFunction(Function::Min)),
             "sum" => Some(Token::ColumnFunction(Function::Sum)),
 
+            // Window Functions
             "dense_rank" => Some(Token::ColumnFunction(Function::DenseRank)),
             "lag" => Some(Token::ColumnFunction(Function::Lag)),
             "lead" => Some(Token::ColumnFunction(Function::Lead)),
             "rank" => Some(Token::ColumnFunction(Function::Rank)),
             "row_number" => Some(Token::ColumnFunction(Function::RowNumber)),
 
-            "select" => Some(Token::Select),
-            "from" => Some(Token::From),
+            // Keywords
             "as" => Some(Token::As),
+            "between" => Some(Token::Between),
+            "by" => Some(Token::By),
+            "case" => Some(Token::Case),
+            "caller" => Some(Token::Caller),
+            "distinct" => Some(Token::Distinct),
+            "except" => Some(Token::Except),
+            "from" => Some(Token::From),
+            "function" => Some(Token::Function),
+            "group" => Some(Token::Group),
+            "having" => Some(Token::Having),
+            "join" => Some(Token::Join),
+            "limit" => Some(Token::Limit),
+            "on" => Some(Token::On),
+            "order" => Some(Token::Order),
+            "over" => Some(Token::Over),
+            "procedure" => Some(Token::Procedure),
+            "return" => Some(Token::Return),
+            "set" => Some(Token::Set),
+            "top" => Some(Token::Top),
+            "union" => Some(Token::Union),
+            "when" => Some(Token::When),
+            "where" => Some(Token::Where),
+            "with" => Some(Token::With),
+
+            // Booleans
+            "true" => Some(Token::Bool(true)),
+            "false" => Some(Token::Bool(false)),
+
+            // Join types
+            "inner" => Some(Token::JoinType(JoinType::Inner)),
+            "left" => Some(Token::JoinType(JoinType::Left)),
+            "right" => Some(Token::JoinType(JoinType::Right)),
+            "outer" => Some(Token::JoinType(JoinType::Outer)),
+            "natural" => Some(Token::JoinType(JoinType::Natural)),
+
+            // Logicals
+            "and" => Some(Token::Logical(Logical::And)),
+            "or" => Some(Token::Logical(Logical::And)),
+            "not" => Some(Token::Logical(Logical::And)),
 
             _ => None,
         };
@@ -331,32 +428,94 @@ impl Lexer {
 mod tests {
     use anyhow::Result;
 
-    use super::{Token, Lexer, Function};
+    use super::{Token, Lexer, Function, DDLKeyword, DMLKeyword, Logical} ;
 
     #[test]
     fn assert_basic_string_match() -> Result<()> {
         let input = r#"
-                SELECT
-                    *, 
-                    SUM(x) AS sum_x
-                FROM table_name;
+with my_table (
+    name,
+    age,
+    year,
+    salary
+) as (
+    select distinct
+        emp.name,
+        emp.age,
+        info.year,
+        info.salary
+    from employees emp
+        join information as info
+            on emp.emp_id = info.emp_id
+    where emp.employed = TRUE
+    and emp.salary > 50000.00
+)
+;
             "#;
 
         let mut lexer = Lexer::new(input.into());
 
         let tokens = vec![
-            Token::Select,
-            Token::Asterisk,
-            Token::Comma,
-            Token::ColumnFunction(Function::Sum),
+            Token::With,
+            Token::Ident("my_table".to_string()),
             Token::OpenParen,
-            Token::Ident("x".to_string()),
+            Token::Ident("name".to_string()),
+            Token::Comma,
+            Token::Ident("age".to_string()),
+            Token::Comma,
+            Token::Ident("year".to_string()),
+            Token::Comma,
+            Token::Ident("salary".to_string()),
             Token::CloseParen,
             Token::As,
-            Token::Ident("sum_x".to_string()),
+            Token::OpenParen,
+            Token::DML(DMLKeyword::Select),
+            Token::Distinct,
+            Token::Ident("emp".to_string()),
+            Token::Period,
+            Token::Ident("name".to_string()),
+            Token::Comma,
+            Token::Ident("emp".to_string()),
+            Token::Period,
+            Token::Ident("age".to_string()),
+            Token::Comma,
+            Token::Ident("info".to_string()),
+            Token::Period,
+            Token::Ident("year".to_string()),
+            Token::Comma,
+            Token::Ident("info".to_string()),
+            Token::Period,
+            Token::Ident("salary".to_string()),
             Token::From,
-            Token::Ident("table_name".to_string()),
+            Token::Ident("employees".to_string()),
+            Token::Ident("emp".to_string()),
+            Token::Join,
+            Token::Ident("information".to_string()),
+            Token::As,
+            Token::Ident("info".to_string()),
+            Token::On,
+            Token::Ident("emp".to_string()),
+            Token::Period,
+            Token::Ident("emp_id".to_string()),
+            Token::Equal,
+            Token::Ident("info".to_string()),
+            Token::Period,
+            Token::Ident("emp_id".to_string()),
+            Token::Where,
+            Token::Ident("emp".to_string()),
+            Token::Period,
+            Token::Ident("employed".to_string()),
+            Token::Equal,
+            Token::Bool(true),
+            Token::Logical(Logical::And),
+            Token::Ident("emp".to_string()),
+            Token::Period,
+            Token::Ident("salary".to_string()),
+            Token::GreaterThan,
+            Token::Float(50000.00),
+            Token::CloseParen,
             Token::Semicolon,
+            Token::EOF,
         ];
 
         for token in tokens {
