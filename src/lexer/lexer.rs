@@ -180,7 +180,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    fn new(input: String) -> Self {
+    pub fn new(input: String) -> Self {
         let mut lexer = Lexer {
             position: 0,
             read_position: 0,
@@ -470,6 +470,17 @@ impl Lexer {
         } else {
             return self.input[self.read_position];
         }
+    }
+
+    pub fn get_tokens(mut self) -> Result<Vec<Token>> {
+        let mut tokens = Vec::new();
+        let mut next_token = self.next_token()?;
+        while next_token != Token::EOF {
+            tokens.push(next_token);
+            next_token = self.next_token()?;
+        }
+
+        return Ok(tokens);
     }
 }
     
