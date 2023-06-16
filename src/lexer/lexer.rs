@@ -397,6 +397,9 @@ impl Lexer {
             "or" => Some(Token::Logical(Logical::And)),
             "not" => Some(Token::Logical(Logical::And)),
 
+            // Null 
+            "null" => Some(Token::Null),
+
             _ => None,
         };
 
@@ -437,13 +440,15 @@ with my_table (
     name,
     age,
     year,
-    salary
+    salary,
+    test_nulls
 ) as (
     select distinct
         emp.name,
         emp.age,
         info.year,
-        info.salary
+        info.salary,
+        NULL as test_nulls
     from employees emp
         join information as info
             on emp.emp_id = info.emp_id
@@ -466,6 +471,8 @@ with my_table (
             Token::Ident("year".to_string()),
             Token::Comma,
             Token::Ident("salary".to_string()),
+            Token::Comma,
+            Token::Ident("test_nulls".to_string()),
             Token::CloseParen,
             Token::As,
             Token::OpenParen,
@@ -486,6 +493,10 @@ with my_table (
             Token::Ident("info".to_string()),
             Token::Period,
             Token::Ident("salary".to_string()),
+            Token::Comma,
+            Token::Null,
+            Token::As,
+            Token::Ident("test_nulls".to_string()),
             Token::From,
             Token::Ident("employees".to_string()),
             Token::Ident("emp".to_string()),
