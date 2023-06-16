@@ -18,6 +18,9 @@ pub enum Token {
     DDL(DDLKeyword),
     DML(DMLKeyword),
 
+    // Data Types
+    DataType(DataType),
+
     // Join Types
     JoinType(JoinType),
 
@@ -44,6 +47,7 @@ pub enum Token {
     Semicolon,
     Colon, 
     Dollar,
+    DollarDelimiter,
     SingleQuote,
     DoubleQuote,
     ExclamationPoint,
@@ -62,7 +66,7 @@ pub enum Token {
     NotEqual,
 
     // Keywords
-    // All,
+    All,
     As,
     Between,
     By,
@@ -70,25 +74,28 @@ pub enum Token {
     Case,
     Distinct,
     Except,
-    // Execute,
+    Execute,
     From,
     Function,
     Group,
     Having,
     Join,
-    // Language,
+    Language,
+    Like,
     Limit,
     On,
     Order,
     Over,
     Procedure,
     Return,
+    Returns,
     Set,
+    Table,
+    Temporary,
     Top,
     Union,
     When,
     Where,
-    With,
 
     // End of file
     EOF,
@@ -103,6 +110,7 @@ pub enum DDLKeyword {
     Rename,
     Replace,
     Truncate,
+    With,
 }
 
 #[allow(dead_code)]
@@ -149,6 +157,19 @@ pub enum Logical {
     And,
     Or,
     Not,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
+pub enum DataType {
+    Number,
+    Int, BigInt, SmallInt, TinyInt, ByteInt,
+    Float, // can be called with FLOAT, FLOAT4, FLOAT8, DOUBLE, DOUBLE PRECISION, REAL
+    Varchar, // can be called with STRING, TEXT, NVARCHAR, NVARCHAR2, CHAR VARYING, NCHAR VARYING
+    Char, // can be called with CHAR, CHARACTER, NCHAR
+    Binary, // can be called with BINARY, VARBINARY
+    Boolean,
+    // Date, Time, TimestampLTZ, TimestampTZ, TimestampNTZ - TODO: Add date/time types
 }
 
 pub struct Lexer {
@@ -225,7 +246,14 @@ impl Lexer {
             b',' => Token::Comma,
             b'.' => Token::Period,
             b';' => Token::Semicolon,
-            b'$' => Token::Dollar,
+            b'$' => {
+                if self.peek_char() == b'$' {
+                    self.read_char();
+                    Token::DollarDelimiter
+                } else {
+                    Token::Dollar
+                }
+            }
             b':' => {
                 if self.peek_char() == b'=' {
                     self.read_char();
@@ -331,6 +359,7 @@ impl Lexer {
             "replace" => Some(Token::DDL(DDLKeyword::Replace)),
             "rename" => Some(Token::DDL(DDLKeyword::Rename)),
             "truncate" => Some(Token::DDL(DDLKeyword::Truncate)),
+            "with" => Some(Token::DDL(DDLKeyword::With)),
 
             // DML
             "call" => Some(Token::DML(DMLKeyword::Call)),
@@ -356,30 +385,36 @@ impl Lexer {
             "row_number" => Some(Token::ColumnFunction(Function::RowNumber)),
 
             // Keywords
+            "all" => Some(Token::All),
             "as" => Some(Token::As),
             "between" => Some(Token::Between),
             "by" => Some(Token::By),
-            "case" => Some(Token::Case),
             "caller" => Some(Token::Caller),
+            "case" => Some(Token::Case),
             "distinct" => Some(Token::Distinct),
             "except" => Some(Token::Except),
+            "execute" => Some(Token::Execute),
             "from" => Some(Token::From),
             "function" => Some(Token::Function),
             "group" => Some(Token::Group),
             "having" => Some(Token::Having),
             "join" => Some(Token::Join),
+            "language" => Some(Token::Language),
+            "like" => Some(Token::Like),
             "limit" => Some(Token::Limit),
             "on" => Some(Token::On),
             "order" => Some(Token::Order),
             "over" => Some(Token::Over),
             "procedure" => Some(Token::Procedure),
             "return" => Some(Token::Return),
+            "returns" => Some(Token::Returns),
             "set" => Some(Token::Set),
+            "table" => Some(Token::Table),
+            "temp" | "temporary" => Some(Token::Temporary),
             "top" => Some(Token::Top),
             "union" => Some(Token::Union),
             "when" => Some(Token::When),
             "where" => Some(Token::Where),
-            "with" => Some(Token::With),
 
             // Booleans
             "true" => Some(Token::Bool(true)),
@@ -394,8 +429,21 @@ impl Lexer {
 
             // Logicals
             "and" => Some(Token::Logical(Logical::And)),
-            "or" => Some(Token::Logical(Logical::And)),
-            "not" => Some(Token::Logical(Logical::And)),
+            "or" => Some(Token::Logical(Logical::Or)),
+            "not" => Some(Token::Logical(Logical::Not)),
+
+            // Data types
+            "int" | "integer" => Some(Token::DataType(DataType::Int)),
+            "bigint" => Some(Token::DataType(DataType::BigInt)),
+            "smallint" => Some(Token::DataType(DataType::SmallInt)),
+            "tinyint" => Some(Token::DataType(DataType::TinyInt)),
+            "byteint" => Some(Token::DataType(DataType::ByteInt)),
+            "number" => Some(Token::DataType(DataType::Number)),
+            "float" | "float4" | "float8" | "double" | "real" => Some(Token::DataType(DataType::Float)),
+            "varchar" | "string" | "text" | "nvarchar" | "nvarchar2" => Some(Token::DataType(DataType::Varchar)), 
+            "char" | "character" | "nchar" => Some(Token::DataType(DataType::Char)),
+            "binary" | "varbinary" => Some(Token::DataType(DataType::Binary)),
+            "boolean" => Some(Token::DataType(DataType::Boolean)),
 
             // Null 
             "null" => Some(Token::Null),
@@ -409,11 +457,9 @@ impl Lexer {
 
     fn read_varchar(&mut self) -> String {
         let start = self.position;
-        println!("{:?}", self.ch as char);
         self.read_char();
         while self.ch != b'\'' {
             self.read_char();
-            println!("{}", self.ch as char);
         }
         return String::from_utf8_lossy(&self.input[start..=self.position]).to_string();
     }
@@ -431,99 +477,164 @@ impl Lexer {
 mod tests {
     use anyhow::Result;
 
-    use super::{Token, Lexer, Function, DDLKeyword, DMLKeyword, Logical} ;
+    use super::{Token, Lexer, Function, DDLKeyword, DMLKeyword, Logical, DataType,} ;
 
     #[test]
     fn assert_basic_string_match() -> Result<()> {
         let input = r#"
-with my_table (
-    name,
-    age,
-    year,
-    salary,
-    test_nulls
-) as (
-    select distinct
-        emp.name,
-        emp.age,
-        info.year,
-        info.salary,
-        NULL as test_nulls
-    from employees emp
-        join information as info
-            on emp.emp_id = info.emp_id
-    where emp.employed = TRUE
-    and emp.salary > 50000.00
+-- Create a temporary table
+CREATE TEMPORARY TABLE temp_table (
+  id INT,
+  name VARCHAR,
+  age INT
+);
+
+-- Create a stored procedure
+CREATE OR REPLACE PROCEDURE my_stored_procedure()
+RETURNS VARCHAR
+LANGUAGE SQL
+AS
+$$
+  -- SQL code goes here
+  -- ...
+  RETURN 'Stored procedure executed successfully';
+$$;
+
+-- Create a function
+CREATE OR REPLACE FUNCTION my_function(arg INT)
+RETURNS TABLE (id INT, name VARCHAR)
+LANGUAGE SQL
+AS
+$$
+  -- SQL code goes here
+  -- ...
+  RETURN 'Stored procedure executed successfully';
+$$;
+
+-- Use a CTE to query data
+WITH cte AS (
+  SELECT id, name
+  FROM temp_table
+  WHERE age > 30
 )
-;
+SELECT *
+FROM cte;
+
+-- Call the stored procedure
+CALL my_stored_procedure();
+
+-- Call the function
+SELECT *
+FROM TABLE(my_function(123));
             "#;
 
         let mut lexer = Lexer::new(input.into());
 
         let tokens = vec![
-            Token::With,
-            Token::Ident("my_table".to_string()),
+            Token::InlineComment("-- Create a temporary table".to_string()),
+            Token::DDL(DDLKeyword::Create),
+            Token::Temporary,
+            Token::Table,
+            Token::Ident("temp_table".to_string()),
             Token::OpenParen,
+            Token::Ident("id".to_string()),
+            Token::DataType(DataType::Int),
+            Token::Comma,
             Token::Ident("name".to_string()),
+            Token::DataType(DataType::Varchar),
             Token::Comma,
             Token::Ident("age".to_string()),
-            Token::Comma,
-            Token::Ident("year".to_string()),
-            Token::Comma,
-            Token::Ident("salary".to_string()),
-            Token::Comma,
-            Token::Ident("test_nulls".to_string()),
+            Token::DataType(DataType::Int),
             Token::CloseParen,
+            Token::Semicolon,
+            Token::InlineComment("-- Create a stored procedure".to_string()),
+            Token::DDL(DDLKeyword::Create),
+            Token::Logical(Logical::Or),
+            Token::DDL(DDLKeyword::Replace),
+            Token::Procedure,
+            Token::Ident("my_stored_procedure".to_string()),
+            Token::OpenParen,
+            Token::CloseParen,
+            Token::Returns,
+            Token::DataType(DataType::Varchar),
+            Token::Language,
+            Token::Ident("SQL".to_string()),
+            Token::As,
+            Token::DollarDelimiter,
+            Token::InlineComment("-- SQL code goes here".to_string()),
+            Token::InlineComment("-- ...".to_string()),
+            Token::Return,
+            Token::Varchar("'Stored procedure executed successfully'".to_string()),
+            Token::Semicolon,
+            Token::DollarDelimiter,
+            Token::Semicolon,
+            Token::InlineComment("-- Create a function".to_string()),
+            Token::DDL(DDLKeyword::Create),
+            Token::Logical(Logical::Or),
+            Token::DDL(DDLKeyword::Replace),
+            Token::Function,
+            Token::Ident("my_function".to_string()),
+            Token::OpenParen,
+            Token::Ident("arg".to_string()),
+            Token::DataType(DataType::Int),
+            Token::CloseParen,
+            Token::Returns,
+            Token::Table,
+            Token::OpenParen,
+            Token::Ident("id".to_string()),
+            Token::DataType(DataType::Int),
+            Token::Comma,
+            Token::Ident("name".to_string()),
+            Token::DataType(DataType::Varchar),
+            Token::CloseParen,
+            Token::Language,
+            Token::Ident("SQL".to_string()),
+            Token::As,
+            Token::DollarDelimiter,
+            Token::InlineComment("-- SQL code goes here".to_string()),
+            Token::InlineComment("-- ...".to_string()),
+            Token::Return,
+            Token::Varchar("'Stored procedure executed successfully'".to_string()),
+            Token::Semicolon,
+            Token::DollarDelimiter,
+            Token::Semicolon,
+            Token::InlineComment("-- Use a CTE to query data".to_string()),
+            Token::DDL(DDLKeyword::With),
+            Token::Ident("cte".to_string()),
             Token::As,
             Token::OpenParen,
             Token::DML(DMLKeyword::Select),
-            Token::Distinct,
-            Token::Ident("emp".to_string()),
-            Token::Period,
+            Token::Ident("id".to_string()),
+            Token::Comma,
             Token::Ident("name".to_string()),
-            Token::Comma,
-            Token::Ident("emp".to_string()),
-            Token::Period,
-            Token::Ident("age".to_string()),
-            Token::Comma,
-            Token::Ident("info".to_string()),
-            Token::Period,
-            Token::Ident("year".to_string()),
-            Token::Comma,
-            Token::Ident("info".to_string()),
-            Token::Period,
-            Token::Ident("salary".to_string()),
-            Token::Comma,
-            Token::Null,
-            Token::As,
-            Token::Ident("test_nulls".to_string()),
             Token::From,
-            Token::Ident("employees".to_string()),
-            Token::Ident("emp".to_string()),
-            Token::Join,
-            Token::Ident("information".to_string()),
-            Token::As,
-            Token::Ident("info".to_string()),
-            Token::On,
-            Token::Ident("emp".to_string()),
-            Token::Period,
-            Token::Ident("emp_id".to_string()),
-            Token::Equal,
-            Token::Ident("info".to_string()),
-            Token::Period,
-            Token::Ident("emp_id".to_string()),
+            Token::Ident("temp_table".to_string()),
             Token::Where,
-            Token::Ident("emp".to_string()),
-            Token::Period,
-            Token::Ident("employed".to_string()),
-            Token::Equal,
-            Token::Bool(true),
-            Token::Logical(Logical::And),
-            Token::Ident("emp".to_string()),
-            Token::Period,
-            Token::Ident("salary".to_string()),
+            Token::Ident("age".to_string()),
             Token::GreaterThan,
-            Token::Float(50000.00),
+            Token::Int(30),
+            Token::CloseParen,
+            Token::DML(DMLKeyword::Select),
+            Token::Asterisk,
+            Token::From,
+            Token::Ident("cte".to_string()),
+            Token::Semicolon,
+            Token::InlineComment("-- Call the stored procedure".to_string()),
+            Token::DML(DMLKeyword::Call),
+            Token::Ident("my_stored_procedure".to_string()),
+            Token::OpenParen,
+            Token::CloseParen,
+            Token::Semicolon,
+            Token::InlineComment("-- Call the function".to_string()),
+            Token::DML(DMLKeyword::Select),
+            Token::Asterisk,
+            Token::From,
+            Token::Table,
+            Token::OpenParen,
+            Token::Ident("my_function".to_string()),
+            Token::OpenParen,
+            Token::Int(123),
+            Token::CloseParen,
             Token::CloseParen,
             Token::Semicolon,
             Token::EOF,
