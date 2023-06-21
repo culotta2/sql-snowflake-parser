@@ -56,8 +56,11 @@ impl Parser {
                      if let Some(ref column) = current_column {
                          current_columns.push(column.clone());
                      }
-                     all_columns.push(current_columns.clone());
+                     if current_columns.len() > 0 {
+                         all_columns.push(current_columns.clone());
+                     }
                      current_columns.clear();
+                     current_column = None;
                      in_select = false;
                  },
                  (true, _, &Token::ColumnFunction(_)) => {
@@ -101,7 +104,7 @@ mod tests {
 
         let columns = vec![
             Column::new("car".to_string()),
-            Column::new("total_price".to_string()),
+            Column::new("base_price".to_string()),
             Column::new("total_count".to_string()),
         ];
 
