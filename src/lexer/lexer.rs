@@ -373,16 +373,14 @@ impl Lexer {
             "cast" => Some(Token::ColumnFunction(Function::Cast)),
             "concat" => Some(Token::ColumnFunction(Function::Concat)),
             "count" => Some(Token::ColumnFunction(Function::Count)),
-            "max" => Some(Token::ColumnFunction(Function::Max)),
-            "min" => Some(Token::ColumnFunction(Function::Min)),
-            "sum" => Some(Token::ColumnFunction(Function::Sum)),
-
-            // Window Functions
             "dense_rank" => Some(Token::ColumnFunction(Function::DenseRank)),
             "lag" => Some(Token::ColumnFunction(Function::Lag)),
             "lead" => Some(Token::ColumnFunction(Function::Lead)),
+            "max" => Some(Token::ColumnFunction(Function::Max)),
+            "min" => Some(Token::ColumnFunction(Function::Min)),
             "rank" => Some(Token::ColumnFunction(Function::Rank)),
             "row_number" => Some(Token::ColumnFunction(Function::RowNumber)),
+            "sum" => Some(Token::ColumnFunction(Function::Sum)),
 
             // Keywords
             "all" => Some(Token::All),
