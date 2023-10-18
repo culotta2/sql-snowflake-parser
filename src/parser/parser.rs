@@ -5,8 +5,6 @@ use crate::lexer::lexer::{DMLKeyword, DDLKeyword, Lexer, Token};
 #[derive(Clone, Debug, PartialEq)]
 pub struct Column {
     name: String,
-    // table: Option<String>,
-    // alias: Option<String>,
 }
 
 impl Column {
@@ -15,23 +13,32 @@ impl Column {
             name,
         }
     }
+}
 
-    // pub fn set_table(&mut self, table: String) {
-    //     self.table = Some(table);
-    // }
-    //
-    // pub fn set_alias(&mut self, alias: String) {
-    //     self.table = Some(alias);
-    // }
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectedColumns {
+    table: String,
+    cte: bool,
+    columns: Vec<Column>,
+}
+
+impl SelectedColumns {
+    pub fn new(table: String, columns: Vec<Column>, cte: bool) -> Self {
+        SelectedColumns {
+            table,
+            columns,
+            cte,
+        }
+    }
 }
 
 struct ParserState {
     in_select: bool,
     in_function: bool,
+    in_object_creation: bool,
+    in_cte: bool,
     paren_count: usize,
-    all_columns: Vec<Vec<Column>>,
     current_columns: Vec<Column>,
-    current_column: Option<Column>,
 }
 
 impl ParserState {
@@ -39,10 +46,10 @@ impl ParserState {
         ParserState {
             in_select: false,
             in_function: false,
+            in_object_creation: false,
+            in_cte: false,
             paren_count: 0,
-            all_columns: Vec::new(),
             current_columns: Vec::new(),
-            current_column: None,
         }
     }
 
@@ -52,12 +59,6 @@ impl ParserState {
 
     fn exit_select(&mut self) {
         self.in_select = false;
-        if let Some(column) = self.current_column.take() {
-            self.current_columns.push(column);
-        }
-        if !self.current_columns.is_empty() {
-            self.all_columns.push(std::mem::take(&mut self.current_columns));
-        }
     }
 
     fn enter_function(&mut self) {
@@ -85,14 +86,21 @@ impl ParserState {
 
     fn add_column(&mut self, name: String) {
         if self.in_select && !self.in_function {
-            self.current_column = Some(Column::new(name));
+            self.current_columns.push(Column::new(name));
         }
     }
 
-    fn add_comma(&mut self) {
-        if let Some(column) = self.current_column.take() {
-            self.current_columns.push(column);
-        }
+    fn enter_object_creation(&mut self) {
+        self.in_object_creation = true;
+    }
+
+    fn enter_cte(&mut self) {
+        self.in_cte = true;
+    }
+
+    fn update_selected_columns(&mut self, selected_columns: &mut Vec<SelectedColumns>) {
+        selected_columns.push(SelectedColumns::new("".to_string(), self.current_columns.clone(), false));
+        self.current_columns.clear();
     }
 }
 
@@ -109,38 +117,52 @@ impl Parser {
         Parser { tokens }
      }
 
-     pub fn get_selected_columns(&self) -> Vec<Vec<Column>> {
-         let mut state = ParserState::new();
 
-         for token in &self.tokens {
-             match token {
-                 Token::DML(DMLKeyword::Select) => {
-                     state.enter_select();
-                 },
-                 Token::From => {
-                     state.exit_select();
-                 },
-                 Token::ColumnFunction(_) => {
-                     state.enter_function();
-                 },
-                 Token::OpenParen => {
-                     state.open_paren();
-                 },
-                 Token::CloseParen => {
-                     state.close_paren();
-                 },
-                 Token::Ident(name) => {
-                     state.add_column(name.clone());
-                 },
-                 Token::Comma => {
-                     state.add_comma();
-                 },
-                 _ => {},
-             }
-         }
+    pub fn get_selected_columns(&self) -> Vec<SelectedColumns> {
+        let mut state = ParserState::new();
+        let mut selected_columns = Vec::new();
+        let mut current_table = None;
+        let mut current_cte = None;
 
-         state.all_columns
-     }
+        for token in &self.tokens {
+        match token {
+            Token::Semicolon => {
+                state.update_selected_columns(&mut selected_columns);
+            },
+            Token::DDL(DDLKeyword::Create) => {
+                state.enter_object_creation();
+            },
+            Token::DDL(DDLKeyword::With) => {
+                state.enter_cte();
+            }
+            Token::DML(DMLKeyword::Select) => {
+                state.enter_select();
+            },
+             Token::From => {
+                state.exit_select();
+             },
+             Token::ColumnFunction(_) => {
+                state.enter_function();
+             },
+             Token::OpenParen => {
+                state.open_paren();
+             },
+             Token::CloseParen => {
+                state.close_paren();
+             },
+             Token::Ident(name) => {
+                state.add_column(name.clone());
+             },
+             _ => {},
+            }
+        }
+
+        // Return for now (make linter happy)
+        let mut v = Vec::new();
+        v.push(SelectedColumns::new("".to_string(), Vec::new(), false));
+        v
+
+    }
 }
 
 
