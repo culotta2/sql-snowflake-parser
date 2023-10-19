@@ -90,12 +90,16 @@ pub enum Token {
     Return,
     Returns,
     Set,
-    Table,
     Temporary,
     Top,
     Union,
     When,
     Where,
+
+    // Objects
+    View,
+    Materialized,
+    Table,
 
     // End of file
     EOF,
@@ -407,12 +411,17 @@ impl Lexer {
             "return" => Some(Token::Return),
             "returns" => Some(Token::Returns),
             "set" => Some(Token::Set),
-            "table" => Some(Token::Table),
             "temp" | "temporary" => Some(Token::Temporary),
             "top" => Some(Token::Top),
             "union" => Some(Token::Union),
             "when" => Some(Token::When),
             "where" => Some(Token::Where),
+
+            // Objects
+            "materialized" => Some(Token::View),
+            "table" => Some(Token::Table),
+            "view" => Some(Token::View),
+
 
             // Booleans
             "true" => Some(Token::Bool(true)),
