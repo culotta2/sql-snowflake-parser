@@ -38,6 +38,7 @@ struct ParserState {
     in_object_creation: bool,
     in_cte: bool,
     paren_count: usize,
+    function_paren_count: usize,
     current_columns: Vec<Column>,
 }
 
@@ -49,12 +50,14 @@ impl ParserState {
             in_object_creation: false,
             in_cte: false,
             paren_count: 0,
+            function_paren_count: 0,
             current_columns: Vec::new(),
         }
     }
 
     fn enter_select(&mut self) {
         self.in_select = true;
+        self.current_columns.clear();
     }
 
     fn exit_select(&mut self) {
@@ -70,15 +73,17 @@ impl ParserState {
     }
 
     fn open_paren(&mut self) {
+        self.paren_count += 1;
         if self.in_function {
-            self.paren_count += 1;
+            self.function_paren_count += 1;
         }
     }
 
     fn close_paren(&mut self) {
+        self.paren_count -= 1;
         if self.in_function {
-            self.paren_count -= 1;
-            if self.paren_count == 0 {
+            self.function_paren_count -= 1;
+            if self.function_paren_count == 0 {
                 self.exit_function();
             }
         }
@@ -98,9 +103,12 @@ impl ParserState {
         self.in_cte = true;
     }
 
-    fn update_selected_columns(&mut self, selected_columns: &mut Vec<SelectedColumns>) {
-        selected_columns.push(SelectedColumns::new("".to_string(), self.current_columns.clone(), false));
-        self.current_columns.clear();
+    fn update_selected_columns(&mut self, selected_columns: &mut Vec<SelectedColumns>, table_name: &Option<String>) {
+        if let Some(table_name) = table_name {
+            selected_columns.push(SelectedColumns::new(table_name.to_owned(), self.current_columns.clone(), self.in_cte));
+        } else {
+            selected_columns.push(SelectedColumns::new("".to_string(), self.current_columns.clone(), false));
+        }
     }
 }
 
@@ -121,47 +129,67 @@ impl Parser {
     pub fn get_selected_columns(&self) -> Vec<SelectedColumns> {
         let mut state = ParserState::new();
         let mut selected_columns = Vec::new();
-        let mut current_table = None;
-        let mut current_cte = None;
+        let mut current_table: Option<String> = None;
+        let mut current_cte: Option<String> = None;
+        let mut tokens_iter = self.tokens.iter().peekable();
 
-        for token in &self.tokens {
-        match token {
-            Token::Semicolon => {
-                state.update_selected_columns(&mut selected_columns);
-            },
-            Token::DDL(DDLKeyword::Create) => {
-                state.enter_object_creation();
-            },
-            Token::DDL(DDLKeyword::With) => {
-                state.enter_cte();
-            }
-            Token::DML(DMLKeyword::Select) => {
-                state.enter_select();
-            },
-             Token::From => {
-                state.exit_select();
-             },
-             Token::ColumnFunction(_) => {
-                state.enter_function();
-             },
-             Token::OpenParen => {
-                state.open_paren();
-             },
-             Token::CloseParen => {
-                state.close_paren();
-             },
-             Token::Ident(name) => {
-                state.add_column(name.clone());
-             },
-             _ => {},
+        while let Some(token) = tokens_iter.next() {
+            let next_token = tokens_iter.peek().unwrap_or(&&Token::EOF);
+
+            match token {
+                Token::EOF => {
+                    break;
+                },
+                Token::Ident(col) if state.in_select && !state.in_function && next_token != &&Token::Period => {
+                    state.add_column(col.clone());
+                },
+                Token::Comma if state.in_cte && state.function_paren_count == 0 && !state.in_select => {
+                    current_cte = if let Token::Ident(s) = next_token {
+                        Some(s.clone())
+                    } else {
+                        None
+                    };
+                }
+                Token::Table | Token::View => {
+                    if let Token::Ident(table_name) = next_token {
+                        current_table = Some(table_name.clone());
+                    }
+                },
+                Token::DDL(DDLKeyword::With) => {
+                    if let Token::Ident(table_name) = next_token {
+                        current_cte = Some(table_name.clone());
+                        state.enter_cte()
+                    }
+                },
+                Token::DDL(DDLKeyword::Create) => {
+                    state.enter_object_creation();
+                },
+                Token::DML(DMLKeyword::Select) => {
+                    state.enter_select();
+                },
+                Token::From => {
+                    if current_cte.is_some() {
+                        state.update_selected_columns(&mut selected_columns, &current_cte.clone());
+                        current_cte = None;
+                    } else {
+                        state.update_selected_columns(&mut selected_columns, &current_table);
+                    }
+                    state.exit_select();
+                },
+                Token::ColumnFunction(_) | Token::Over => {
+                    state.enter_function();
+                },
+                Token::OpenParen => {
+                    state.open_paren();
+                },
+                Token::CloseParen => {
+                    state.close_paren();
+                },
+                _ => {},
             }
         }
 
-        // Return for now (make linter happy)
-        let mut v = Vec::new();
-        v.push(SelectedColumns::new("".to_string(), Vec::new(), false));
-        v
-
+        selected_columns
     }
 }
 
@@ -170,34 +198,50 @@ impl Parser {
 mod tests {
     use anyhow::Result;
 
-    use super::{Parser, Column};
+    use super::{Parser, Column, SelectedColumns};
 
     #[test]
     fn assert_finds_all_columns() -> Result<()> {
         let parser = Parser::new("input.sql".into()); 
 
-        // let columns = vec![
-        //     Column::new("id".to_string()),
-        //     Column::new("name".to_string()),
-        //     Column::new("name".to_string()),
-        //     Column::new("name".to_string()),
-        //     Column::new("name".to_string()),
-        //     Column::new("name".to_string()),
-        // ];
+        let columns = {
+            vec![
+                SelectedColumns::new(
+                    "EMPLOYEES".to_string(),
+                    vec![
+                        Column::new("ID".to_string()),
+                        Column::new("NAME".to_string()),
+                    ],
+                    true
+                ),
+                SelectedColumns::new(
+                    "SALARIES".to_string(),
+                    vec![
+                        Column::new("ID".to_string()),
+                        Column::new("SALARY_RANK".to_string()),
+                    ],
+                    true
+                ),
+                SelectedColumns::new(
+                    "".to_string(),
+                    vec![
+                        Column::new("ID".to_string()),
+                        Column::new("NAME".to_string()),
+                        Column::new("SALARY_RANK".to_string()),
+                    ],
+                    false
+                ),
+            ]
+        };
 
-        let returned_cols = &parser.get_selected_columns()[0];
+        let returned_cols = &parser.get_selected_columns();
 
-        for column in returned_cols.iter() {
-            println!("{:?}", column);
+        for (column, expected_column) in returned_cols.iter().zip(columns.iter()) {
+            println!("Expected: {:?}, Actual: {:?}", expected_column, column);
+            assert_eq!(expected_column, column);
         }
 
-
-        // for (column, expected_column) in returned_cols.iter().zip(columns.iter()) {
-        //     println!("Expected: {:?}, Actual: {:?}", expected_column, column);
-        //     // assert_eq!(expected_column, column);
-        // }
-
-        None.unwrap()
-
+        Ok(())
     }
 }
+
