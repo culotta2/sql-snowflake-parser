@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn assert_finds_all_columns() -> Result<()> {
-        let parser = Parser::new("input.sql".into()); 
+        let parser = Parser::new("scripts/input.sql".into()); 
 
         let columns = {
             vec![
