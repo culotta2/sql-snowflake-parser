@@ -172,6 +172,7 @@ impl Parser {
                         state.update_selected_columns(&mut selected_columns, &current_cte.clone());
                         current_cte = None;
                     } else {
+                        state.in_cte = false;
                         state.update_selected_columns(&mut selected_columns, &current_table);
                     }
                     state.exit_select();
@@ -223,7 +224,7 @@ mod tests {
                     true
                 ),
                 SelectedColumns::new(
-                    "".to_string(),
+                    "COMBINED_TABLE".to_string(),
                     vec![
                         Column::new("ID".to_string()),
                         Column::new("NAME".to_string()),
