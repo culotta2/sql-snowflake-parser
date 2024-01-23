@@ -472,12 +472,13 @@ impl Lexer {
     }
 
     fn peek_char(&self) -> u8 {
-        if self.read_position >= self.input.len() {
-            return 0;
+        if let Some(c) = self.input.get(self.read_position) {
+            return *c;
         } else {
-            return self.input[self.read_position];
+            return 0;
         }
     }
+
 
     pub fn get_tokens(mut self) -> Result<Vec<Token>> {
         let mut tokens = Vec::new();
