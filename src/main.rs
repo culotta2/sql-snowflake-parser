@@ -1,8 +1,6 @@
 mod lexer;
 mod parser;
 
-// use parser::parser::Column;
-
 use crate::parser::parser::Parser;
 
 
