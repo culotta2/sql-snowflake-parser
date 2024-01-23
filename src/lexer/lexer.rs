@@ -30,11 +30,10 @@ pub enum Token {
     // Logical
     Logical(Logical),
 
-
     // Operators
-    Assign, 
+    Assign,
     Asterisk,
-    Minus, 
+    Minus,
     Modulo,
     Plus,
     Slash,
@@ -45,7 +44,7 @@ pub enum Token {
     Comma,
     Period,
     Semicolon,
-    Colon, 
+    Colon,
     Dollar,
     DollarDelimiter,
     SingleQuote,
@@ -55,7 +54,6 @@ pub enum Token {
     // Comments
     BlockComment(String),
     InlineComment(String),
-
 
     // Comparisons
     Equal,
@@ -167,11 +165,15 @@ pub enum Logical {
 #[derive(Debug, PartialEq)]
 pub enum DataType {
     Number,
-    Int, BigInt, SmallInt, TinyInt, ByteInt,
-    Float, // can be called with FLOAT, FLOAT4, FLOAT8, DOUBLE, DOUBLE PRECISION, REAL
+    Int,
+    BigInt,
+    SmallInt,
+    TinyInt,
+    ByteInt,
+    Float,   // can be called with FLOAT, FLOAT4, FLOAT8, DOUBLE, DOUBLE PRECISION, REAL
     Varchar, // can be called with STRING, TEXT, NVARCHAR, NVARCHAR2, CHAR VARYING, NCHAR VARYING
-    Char, // can be called with CHAR, CHARACTER, NCHAR
-    Binary, // can be called with BINARY, VARBINARY
+    Char,    // can be called with CHAR, CHARACTER, NCHAR
+    Binary,  // can be called with BINARY, VARBINARY
     Boolean,
     // Date, Time, TimestampLTZ, TimestampTZ, TimestampNTZ - TODO: Add date/time types
 }
@@ -209,7 +211,7 @@ impl Lexer {
                 } else {
                     Token::LessThan
                 }
-            },
+            }
             b'>' => {
                 if self.peek_char() == b'=' {
                     self.read_char();
@@ -217,14 +219,14 @@ impl Lexer {
                 } else {
                     Token::GreaterThan
                 }
-            },
+            }
             b'-' => {
                 if self.peek_char() == b'-' {
                     Token::InlineComment(self.read_inline_comment())
                 } else {
                     Token::Minus
                 }
-            },
+            }
             b'!' => {
                 if self.peek_char() == b'=' {
                     self.read_char();
@@ -232,7 +234,7 @@ impl Lexer {
                 } else {
                     Token::ExclamationPoint
                 }
-            },
+            }
             b'*' => Token::Asterisk,
             b'=' => Token::Equal,
             b'/' => {
@@ -243,7 +245,7 @@ impl Lexer {
                 } else {
                     Token::Slash
                 }
-            },
+            }
 
             b'(' => Token::OpenParen,
             b')' => Token::CloseParen,
@@ -265,7 +267,7 @@ impl Lexer {
                 } else {
                     Token::Colon
                 }
-            },
+            }
             b'\'' => Token::Varchar(self.read_varchar()),
             b'"' => Token::DoubleQuote,
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
@@ -276,19 +278,15 @@ impl Lexer {
                     Some(ident_type) => Ok(ident_type),
                     None => Ok(Token::Ident(ident)),
                 };
-            },
+            }
             b'0'..=b'9' => {
                 let potential_number = self.read_number();
-                let ret_tok = match &potential_number
-                    .chars()
-                    .filter(|ch| ch == &'.')
-                    .count() 
-                {
+                let ret_tok = match &potential_number.chars().filter(|ch| ch == &'.').count() {
                     0 => Token::Int(potential_number.parse().expect("Expected an int value")),
                     1 => Token::Float(potential_number.parse().expect("Expected an float value")),
                     _ => Token::Illegal,
                 };
-                
+
                 return Ok(ret_tok);
             }
             0 => Token::EOF,
@@ -310,11 +308,11 @@ impl Lexer {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.ch.is_ascii_whitespace(){
+        while self.ch.is_ascii_whitespace() {
             self.read_char();
         }
     }
-    
+
     fn read_ident(&mut self) -> String {
         let start = self.position;
         while self.ch.is_ascii_alphanumeric() || self.ch == b'_' {
@@ -354,7 +352,7 @@ impl Lexer {
         return String::from_utf8_lossy(&self.input[start..self.position]).to_string();
     }
 
-    fn string_to_token(&self, ident: &str) -> Option<Token>{
+    fn string_to_token(&self, ident: &str) -> Option<Token> {
         let returned_tok = match ident {
             // DDL
             "alter" => Some(Token::DDL(DDLKeyword::Alter)),
@@ -422,7 +420,6 @@ impl Lexer {
             "table" => Some(Token::Table),
             "view" => Some(Token::View),
 
-
             // Booleans
             "true" => Some(Token::Bool(true)),
             "false" => Some(Token::Bool(false)),
@@ -446,20 +443,23 @@ impl Lexer {
             "tinyint" => Some(Token::DataType(DataType::TinyInt)),
             "byteint" => Some(Token::DataType(DataType::ByteInt)),
             "number" => Some(Token::DataType(DataType::Number)),
-            "float" | "float4" | "float8" | "double" | "real" => Some(Token::DataType(DataType::Float)),
-            "varchar" | "string" | "text" | "nvarchar" | "nvarchar2" => Some(Token::DataType(DataType::Varchar)), 
+            "float" | "float4" | "float8" | "double" | "real" => {
+                Some(Token::DataType(DataType::Float))
+            }
+            "varchar" | "string" | "text" | "nvarchar" | "nvarchar2" => {
+                Some(Token::DataType(DataType::Varchar))
+            }
             "char" | "character" | "nchar" => Some(Token::DataType(DataType::Char)),
             "binary" | "varbinary" => Some(Token::DataType(DataType::Binary)),
             "boolean" => Some(Token::DataType(DataType::Boolean)),
 
-            // Null 
+            // Null
             "null" => Some(Token::Null),
 
             _ => None,
         };
 
         return returned_tok;
-
     }
 
     fn read_varchar(&mut self) -> String {
@@ -479,7 +479,6 @@ impl Lexer {
         }
     }
 
-
     pub fn get_tokens(mut self) -> Result<Vec<Token>> {
         let mut tokens = Vec::new();
         let mut next_token = self.next_token()?;
@@ -491,12 +490,12 @@ impl Lexer {
         return Ok(tokens);
     }
 }
-    
+
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
 
-    use super::{Token, Lexer, Function, DDLKeyword, DMLKeyword, Logical, DataType,} ;
+    use super::{DDLKeyword, DMLKeyword, DataType, Function, Lexer, Logical, Token};
 
     #[test]
     fn assert_basic_string_match() -> Result<()> {

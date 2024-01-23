@@ -1,6 +1,6 @@
 // use anyhow::Result;
 
-use crate::lexer::lexer::{DMLKeyword, DDLKeyword, Lexer, Token};
+use crate::lexer::lexer::{DDLKeyword, DMLKeyword, Lexer, Token};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Column {
@@ -9,9 +9,7 @@ pub struct Column {
 
 impl Column {
     pub fn new(name: String) -> Self {
-        Column {
-            name,
-        }
+        Column { name }
     }
 }
 
@@ -103,11 +101,23 @@ impl ParserState {
         self.in_cte = true;
     }
 
-    fn update_selected_columns(&mut self, selected_columns: &mut Vec<SelectedColumns>, table_name: &Option<String>) {
+    fn update_selected_columns(
+        &mut self,
+        selected_columns: &mut Vec<SelectedColumns>,
+        table_name: &Option<String>,
+    ) {
         if let Some(table_name) = table_name {
-            selected_columns.push(SelectedColumns::new(table_name.to_owned(), self.current_columns.clone(), self.in_cte));
+            selected_columns.push(SelectedColumns::new(
+                table_name.to_owned(),
+                self.current_columns.clone(),
+                self.in_cte,
+            ));
         } else {
-            selected_columns.push(SelectedColumns::new("".to_string(), self.current_columns.clone(), false));
+            selected_columns.push(SelectedColumns::new(
+                "".to_string(),
+                self.current_columns.clone(),
+                false,
+            ));
         }
     }
 }
@@ -117,14 +127,13 @@ pub struct Parser {
 }
 
 impl Parser {
-     pub fn new(file_path: String) -> Self {
+    pub fn new(file_path: String) -> Self {
         let input = std::fs::read_to_string(file_path).expect("Failed to read file");
         let lexer = Lexer::new(input.into());
         let tokens: Vec<Token> = lexer.get_tokens().into_iter().flatten().collect();
 
         Parser { tokens }
-     }
-
+    }
 
     pub fn get_selected_columns(&self) -> Vec<SelectedColumns> {
         let mut state = ParserState::new();
@@ -139,11 +148,15 @@ impl Parser {
             match token {
                 Token::EOF => {
                     break;
-                },
-                Token::Ident(col) if state.in_select && !state.in_function && next_token != &&Token::Period => {
+                }
+                Token::Ident(col)
+                    if state.in_select && !state.in_function && next_token != &&Token::Period =>
+                {
                     state.add_column(col.clone());
-                },
-                Token::Comma if state.in_cte && state.function_paren_count == 0 && !state.in_select => {
+                }
+                Token::Comma
+                    if state.in_cte && state.function_paren_count == 0 && !state.in_select =>
+                {
                     current_cte = if let Token::Ident(s) = next_token {
                         Some(s.clone())
                     } else {
@@ -154,19 +167,19 @@ impl Parser {
                     if let Token::Ident(table_name) = next_token {
                         current_table = Some(table_name.clone());
                     }
-                },
+                }
                 Token::DDL(DDLKeyword::With) => {
                     if let Token::Ident(table_name) = next_token {
                         current_cte = Some(table_name.clone());
                         state.enter_cte()
                     }
-                },
+                }
                 Token::DDL(DDLKeyword::Create) => {
                     state.enter_object_creation();
-                },
+                }
                 Token::DML(DMLKeyword::Select) => {
                     state.enter_select();
-                },
+                }
                 Token::From => {
                     if current_cte.is_some() {
                         state.update_selected_columns(&mut selected_columns, &current_cte.clone());
@@ -176,17 +189,17 @@ impl Parser {
                         state.update_selected_columns(&mut selected_columns, &current_table);
                     }
                     state.exit_select();
-                },
+                }
                 Token::ColumnFunction(_) | Token::Over => {
                     state.enter_function();
-                },
+                }
                 Token::OpenParen => {
                     state.open_paren();
-                },
+                }
                 Token::CloseParen => {
                     state.close_paren();
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
@@ -194,16 +207,15 @@ impl Parser {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
 
-    use super::{Parser, Column, SelectedColumns};
+    use super::{Column, Parser, SelectedColumns};
 
     #[test]
     fn assert_finds_all_columns() -> Result<()> {
-        let parser = Parser::new("scripts/input.sql".into()); 
+        let parser = Parser::new("scripts/input.sql".into());
 
         let columns = {
             vec![
@@ -213,7 +225,7 @@ mod tests {
                         Column::new("ID".to_string()),
                         Column::new("NAME".to_string()),
                     ],
-                    true
+                    true,
                 ),
                 SelectedColumns::new(
                     "SALARIES".to_string(),
@@ -221,7 +233,7 @@ mod tests {
                         Column::new("ID".to_string()),
                         Column::new("SALARY_RANK".to_string()),
                     ],
-                    true
+                    true,
                 ),
                 SelectedColumns::new(
                     "COMBINED_TABLE".to_string(),
@@ -230,7 +242,7 @@ mod tests {
                         Column::new("NAME".to_string()),
                         Column::new("SALARY_RANK".to_string()),
                     ],
-                    false
+                    false,
                 ),
             ]
         };
@@ -245,4 +257,3 @@ mod tests {
         Ok(())
     }
 }
-
