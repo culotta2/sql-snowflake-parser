@@ -532,12 +532,14 @@ $$;
 
 -- Use a CTE to query data
 WITH cte AS (
-  SELECT id, name
+  SELECT id, name, salary
   FROM temp_table
   WHERE age > 30
 )
-SELECT *
-FROM cte;
+SELECT name, sum(salary)
+FROM cte
+group by name
+;
 
 -- Call the stored procedure
 CALL my_stored_procedure();
@@ -626,6 +628,8 @@ FROM TABLE(my_function(123));
             Token::Ident("id".to_string()),
             Token::Comma,
             Token::Ident("name".to_string()),
+            Token::Comma,
+            Token::Ident("salary".to_string()),
             Token::From,
             Token::Ident("temp_table".to_string()),
             Token::Where,
@@ -634,9 +638,17 @@ FROM TABLE(my_function(123));
             Token::Int(30),
             Token::CloseParen,
             Token::DML(DMLKeyword::Select),
-            Token::Asterisk,
+            Token::Ident("name".to_string()),
+            Token::Comma,
+            Token::ColumnFunction(Function::Sum),
+            Token::OpenParen,
+            Token::Ident("salary".to_string()),
+            Token::CloseParen,
             Token::From,
             Token::Ident("cte".to_string()),
+            Token::Group,
+            Token::By,
+            Token::Ident("name".to_string()),
             Token::Semicolon,
             Token::InlineComment("-- Call the stored procedure".to_string()),
             Token::DML(DMLKeyword::Call),
