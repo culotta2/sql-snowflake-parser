@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Illegal,
     Ident(String),
@@ -104,7 +104,7 @@ pub enum Token {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DDLKeyword {
     Alter,
     Create,
@@ -116,7 +116,7 @@ pub enum DDLKeyword {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DMLKeyword {
     Call,
     Delete,
@@ -126,7 +126,7 @@ pub enum DMLKeyword {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Function {
     Avg,
     Cast,
@@ -144,7 +144,7 @@ pub enum Function {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum JoinType {
     Inner,
     Left,
@@ -154,7 +154,7 @@ pub enum JoinType {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Logical {
     And,
     Or,
@@ -162,7 +162,7 @@ pub enum Logical {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum DataType {
     Number,
     Int,
